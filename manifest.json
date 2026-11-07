@@ -1,0 +1,13 @@
+{
+  "name": "كونتاريون",
+  "short_name": "كونتاريون",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#faf7fd",
+  "theme_color": "#5b2a86",
+  "icons": [
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

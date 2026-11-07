@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#5b2a86">
+<link rel="manifest" href="manifest.json">
+<title>كونتاريون</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--p:#5b2a86;--pl:#f1e9f8;--o:#f58220;--bg:#faf7fd;--t:#2a1740}
+*{box-sizing:border-box;font-family:Tahoma,Arial,sans-serif}
+body{margin:0;background:var(--bg);color:var(--t);padding-bottom:70px}
+header{background:var(--p);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5;border-bottom:4px solid var(--o)}
+header img{height:38px;background:#fff;border-radius:8px;padding:2px}
+header h1{font-size:18px;margin:0;flex:1}
+header small{display:block;font-weight:normal;opacity:.85;font-size:12px}
+main{padding:14px;max-width:900px;margin:auto}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:2px solid var(--pl);z-index:5}
+nav button{flex:1;border:0;background:none;padding:8px 2px;font-size:11px;color:#777}
+nav button b{display:block;font-size:20px}
+nav button.on{color:var(--p);font-weight:bold;border-top:3px solid var(--o)}
+.card{background:#fff;border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:0 1px 4px #5b2a8622}
+.row{display:flex;gap:10px;align-items:center}
+.grow{flex:1}
+.btn{background:var(--p);color:#fff;border:0;border-radius:10px;padding:10px 14px;font-size:14px}
+.btn.o{background:var(--o)}.btn.g{background:#eee;color:#333}.btn.r{background:#c0392b}
+.btn.sm{padding:6px 10px;font-size:12px}
+input,select,textarea{width:100%;padding:10px;border:1px solid #d6c8e6;border-radius:10px;font-size:14px;margin:4px 0 10px;background:#fff}
+label{font-size:12px;color:#666}
+.av{width:46px;height:46px;border-radius:50%;background:var(--pl);object-fit:cover;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.big{width:90px;height:90px;font-size:44px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:#fff;border-radius:14px;padding:12px;text-align:center;border-bottom:4px solid var(--o)}
+.stat b{font-size:24px;color:var(--p);display:block}
+.tag{background:var(--pl);color:var(--p);border-radius:20px;padding:2px 9px;font-size:11px}
+.tag.o{background:#fff0e0;color:#b85a00}
+#modal{position:fixed;inset:0;background:#000a;display:none;z-index:20;align-items:flex-end;justify-content:center}
+#modal.on{display:flex}
+#box{background:#fff;width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px}
+#toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--p);color:#fff;padding:10px 18px;border-radius:30px;z-index:30;display:none;border:2px solid var(--o)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:6px 4px;border-bottom:1px solid #eee;text-align:center}
+th{background:var(--pl);color:var(--p)}
+.login{max-width:380px;margin:40px auto;text-align:center}
+.login img{height:110px}
+a{color:var(--p)}
+.att select{width:auto;padding:4px;margin:0}
+@media print{header,nav,.noprint{display:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal"><div id="box"></div></div>
+<div id="toast"></div>
+<script>
+const K='kontarion_v1';
+const ROLES={supervisor:'مشرف',priest:'أب كاهن',servant:'خادم',kid:'مخدوم'};
+const GRADES=['أولى إعدادي','ثانية إعدادي','ثالثة إعدادي','أولى ثانوي','ثانية ثانوي','ثالثة ثانوي'];
+let db=JSON.parse(localStorage.getItem(K)||'null')||{people:[],att:[]};
+db.families=db.families||[];db.settings=db.settings||{};
+const logoSrc=()=>db.settings.logo||'logo.png';
+const save=()=>localStorage.setItem(K,JSON.stringify(db));
+const famName=id=>(db.families.find(f=>f.id===id)||{}).name||'';
+let kidFam='',attFam='',famView='';
+let me=db.people.find(p=>p.id===sessionStorage.getItem('me'))||null;
+let tab='home',tmpPhoto='',scanner=null,lastScan={},attDate=today(),attGroup='kid',attGrade='',attQ='',kidQ='',kidGrade='',kidGender='';
+const isAdmin=()=>me&&(me.role==='supervisor'||me.role==='priest');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+const uid=()=>'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const $=id=>document.getElementById(id);
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',2800)}
+function openModal(h){$('box').innerHTML=h;$('modal').classList.add('on')}
+function closeModal(){stopScan();$('modal').classList.remove('on')}
+$('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
+const avatar=(p,c='')=>p.photo?`<img class="av ${c}" src="${p.photo}">`:`<div class="av ${c}">${p.gender==='f'?'👧':'👦'}</div>`;
+
+/* ---------- الدخول ---------- */
+function render(){
+  if(!db.people.some(p=>p.role==='supervisor'))return setup();
+  if(!me)return login();
+  const tabs=[['home','🏠','الرئيسية'],['att','✅','الحضور'],['fam','🏘️','الأسر'],['kids','👥','المخدومين'],...(isAdmin()?[['staff','🛡️','الخدام']]:[]),['rep','📊','التقارير'],['set','⚙️','الإعدادات']];
+  $('app').innerHTML=`<header><img src="${logoSrc()}" onerror="this.style.display='none'"><h1>كونتاريون<small>${esc(me.name)} — ${ROLES[me.role]}</small></h1><button class="btn o sm" onclick="logout()">خروج</button></header>
+  <main id="main"></main><nav>${tabs.map(t=>`<button class="${tab===t[0]?'on':''}" onclick="tab='${t[0]}';render()"><b>${t[1]}</b>${t[2]}</button>`).join('')}</nav>`;
+  ({home:vHome,att:vAtt,fam:vFam,kids:vKids,staff:vStaff,rep:vRep,set:vSet})[tab]();
+}
+function setup(){$('app').innerHTML=`<div class="login"><img src="${logoSrc()}" onerror="this.style.display='none'"><h2 style="color:var(--p)">مرحباً بك في كونتاريون</h2><p>أنشئ حساب المشرف الأول</p><div style="text-align:right"><label>الاسم</label><input id="sn"><label>رقم سري (٤ أرقام أو أكثر)</label><input id="sp" type="password" inputmode="numeric"></div><button class="btn" style="width:100%" onclick="doSetup()">إنشاء الحساب</button></div>`}
+function doSetup(){const n=$('sn').value.trim(),p=$('sp').value.trim();if(!n||p.length<4)return toast('اكتب الاسم ورقم سري ٤ أرقام على الأقل');
+  const u={id:uid(),role:'supervisor',name:n,pin:p,gender:'m'};db.people.push(u);save();me=u;sessionStorage.setItem('me',u.id);render()}
+function login(){const st=db.people.filter(p=>p.role!=='kid');
+  $('app').innerHTML=`<div class="login"><img src="${logoSrc()}" onerror="this.style.display='none'"><h2 style="color:var(--p)">كونتاريون</h2><div style="text-align:right"><label>الاسم</label><select id="ln">${st.map(s=>`<option value="${s.id}">${esc(s.name)} (${ROLES[s.role]})</option>`).join('')}</select><label>الرقم السري</label><input id="lp" type="password" inputmode="numeric"></div><button class="btn" style="width:100%" onclick="doLogin()">دخول</button></div>`}
+function doLogin(){const u=db.people.find(p=>p.id===$('ln').value);if(u&&u.pin===$('lp').value.trim()){me=u;sessionStorage.setItem('me',u.id);tab='home';render();notifyBdays()}else toast('الرقم السري غير صحيح')}
+function logout(){me=null;sessionStorage.removeItem('me');render()}
+
+/* ---------- أعياد الميلاد ---------- */
+function daysToBday(b){if(!b)return 999;const n=new Date();const t=new Date(n.getFullYear(),n.getMonth(),n.getDate());const [y,m,d]=b.split('-').map(Number);let x=new Date(n.getFullYear(),m-1,d);if(x<t)x=new Date(n.getFullYear()+1,m-1,d);return Math.round((x-t)/864e5)}
+function bdays(limit){return db.people.filter(p=>p.birth).map(p=>({p,d:daysToBday(p.birth)})).filter(x=>x.d<=limit).sort((a,b)=>a.d-b.d)}
+function notifyBdays(){const t=bdays(0);if(t.length&&'Notification' in window&&Notification.permission==='granted')new Notification('🎂 عيد ميلاد اليوم',{body:t.map(x=>x.p.name).join('، ')})}
+
+/* ---------- الرئيسية ---------- */
+function vHome(){const kids=db.people.filter(p=>p.role==='kid');const tr=db.att.filter(r=>r.date===today()&&r.in&&kids.some(k=>k.id===r.pid)).length;
+  const bd=bdays(30);
+  $('main').innerHTML=`<div class="stats"><div class="stat"><b>${kids.length}</b>مخدوم</div><div class="stat"><b>${db.people.filter(p=>p.role!=='kid').length}</b>خادم</div><div class="stat"><b>${tr}</b>حضور اليوم</div></div>
+  <h3 style="color:var(--p)">🎂 أعياد الميلاد القادمة (٣٠ يوم)</h3>
+  ${bd.length?bd.map(x=>`<div class="card row" onclick="profile('${x.p.id}')">${avatar(x.p)}<div class="grow"><b>${esc(x.p.name)}</b><br><small>${ROLES[x.p.role]} ${x.p.grade?'— '+x.p.grade:''}</small></div><span class="tag ${x.d==0?'o':''}">${x.d==0?'🎉 اليوم!':x.d==1?'بكرة':'بعد '+x.d+' يوم'}</span></div>`).join(''):'<div class="card">لا توجد أعياد ميلاد قريبة</div>'}`}
+
+/* ---------- الأسر ---------- */
+function vFam(){
+  if(famView){const f=db.families.find(x=>x.id===famView);if(!f){famView='';return vFam()}
+    const kids=db.people.filter(p=>p.role==='kid'&&p.family===f.id).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+    const sv=db.people.filter(p=>p.role!=='kid'&&(f.servants||[]).includes(p.id));
+    const tk=db.att.filter(r=>r.date===today()&&r.in&&kids.some(k=>k.id===r.pid)).length;
+    $('main').innerHTML=`<button class="btn g sm" onclick="famView='';vFam()">⬅ كل الأسر</button>
+    <h2 style="color:var(--p);margin:10px 0">🏘️ ${esc(f.name)}</h2>
+    <div class="stats"><div class="stat"><b>${kids.length}</b>مخدوم</div><div class="stat"><b>${sv.length}</b>خادم</div><div class="stat"><b>${tk}</b>حضور اليوم</div></div>
+    <div class="row" style="margin:12px 0"><button class="btn o grow" onclick="form('kid','','${f.id}')">➕ إضافة مخدوم للأسرة</button>${isAdmin()?`<button class="btn g" onclick="famForm('${f.id}')">✏️ تعديل الأسرة</button>`:''}</div>
+    <h3 style="color:var(--p)">الخدام المسؤولين</h3>${sv.map(listRow).join('')||'<div class="card">لم يتم تعيين خدام</div>'}
+    <h3 style="color:var(--p)">المخدومين</h3>${kids.map(listRow).join('')||'<div class="card">لا يوجد مخدومين في الأسرة</div>'}`;return}
+  const un=db.people.filter(p=>p.role==='kid'&&!db.families.some(f=>f.id===p.family)).length;
+  $('main').innerHTML=`${isAdmin()?'<button class="btn o" style="width:100%" onclick="famForm()">➕ إضافة أسرة جديدة</button><br><br>':''}
+  ${db.families.map(f=>`<div class="card row" onclick="famView='${f.id}';vFam()"><div class="av">🏘️</div><div class="grow"><b>${esc(f.name)}</b><br><small>${db.people.filter(p=>p.family===f.id).length} مخدوم — ${(f.servants||[]).length} خادم</small></div><span>◀</span></div>`).join('')||'<div class="card">لا توجد أسر بعد'+(isAdmin()?' — اضغط إضافة أسرة':'')+'</div>'}
+  ${un?`<div class="card" style="border:2px dashed var(--o)">⚠️ ${un} مخدوم غير مضافين لأي أسرة</div>`:''}`}
+function famForm(id){if(!isAdmin())return toast('للمشرف فقط');const f=db.families.find(x=>x.id===id)||{servants:[]};
+  const st=db.people.filter(p=>p.role!=='kid');
+  openModal(`<h3>${id?'تعديل':'إضافة'} أسرة</h3><label>اسم الأسرة (مثلاً: أسرة مارجرجس)</label><input id="fm_name" value="${esc(f.name)}">
+  <label>الخدام المسؤولين عن الأسرة</label><div class="card">${st.map(s=>`<label style="display:flex;gap:8px;align-items:center;font-size:14px;color:inherit"><input type="checkbox" class="fm_sv" style="width:auto;margin:0" value="${s.id}" ${(f.servants||[]).includes(s.id)?'checked':''}> ${esc(s.name)} <span class="tag">${ROLES[s.role]}</span></label>`).join('')||'أضف خدام أولاً من تبويب الخدام'}</div>
+  <button class="btn" style="width:100%" onclick="saveFam('${id||''}')">حفظ</button>${id?`<br><br><button class="btn r" style="width:100%" onclick="delFam('${id}')">حذف الأسرة (المخدومين يفضلوا بدون أسرة)</button>`:''}`)}
+function saveFam(id){const n=$('fm_name').value.trim();if(!n)return toast('اكتب اسم الأسرة');
+  let f=db.families.find(x=>x.id===id);if(!f){f={id:uid()};db.families.push(f)}
+  f.name=n;f.servants=[...document.querySelectorAll('.fm_sv:checked')].map(c=>c.value);save();closeModal();toast('تم الحفظ ✅');render()}
+function delFam(id){if(!confirm('حذف الأسرة؟'))return;db.families=db.families.filter(f=>f.id!==id);db.people.forEach(p=>{if(p.family===id)p.family=''});famView='';save();closeModal();render()}
+
+/* ---------- المخدومين / الخدام ---------- */
+function vKids(){const list=db.people.filter(p=>p.role==='kid'&&(!kidFam||(kidFam==='none'?!famName(p.family):p.family===kidFam))&&(!kidGrade||p.grade===kidGrade)&&(!kidGender||p.gender===kidGender)&&p.name.includes(kidQ)).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  $('main').innerHTML=`<div class="row"><button class="btn o grow" onclick="form('kid')">➕ إضافة مخدوم</button>${isAdmin()?'<button class="btn g" onclick="printCards(\'kid\')">🖨️ كروت QR</button>':''}</div><br>
+  <input placeholder="🔍 بحث بالاسم" value="${esc(kidQ)}" oninput="kidQ=this.value;vKidsList()">
+  <select onchange="kidFam=this.value;vKids()"><option value="">كل الأسر</option>${db.families.map(f=>`<option value="${f.id}" ${kidFam===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}<option value="none" ${kidFam==='none'?'selected':''}>بدون أسرة</option></select>
+  <div class="row"><select onchange="kidGrade=this.value;vKids()"><option value="">كل الفرق</option>${GRADES.map(g=>`<option ${g===kidGrade?'selected':''}>${g}</option>`).join('')}</select><select onchange="kidGender=this.value;vKids()"><option value="">أولاد وبنات</option><option value="m" ${kidGender=='m'?'selected':''}>أولاد</option><option value="f" ${kidGender=='f'?'selected':''}>بنات</option></select></div>
+  <div id="kl">${list.map(listRow).join('')||'<div class="card">لا يوجد مخدومين</div>'}</div>`;}
+function vKidsList(){const el=$('kl');if(!el)return;const list=db.people.filter(p=>p.role==='kid'&&(!kidFam||(kidFam==='none'?!famName(p.family):p.family===kidFam))&&(!kidGrade||p.grade===kidGrade)&&(!kidGender||p.gender===kidGender)&&p.name.includes(kidQ));el.innerHTML=list.map(listRow).join('')}
+const listRow=p=>`<div class="card row" onclick="profile('${p.id}')">${avatar(p)}<div class="grow"><b>${esc(p.name)}</b><br><small>${esc(p.grade||ROLES[p.role])} ${p.school?'— '+esc(p.school):''} ${famName(p.family)?'— 🏘️ '+esc(famName(p.family)):''}</small></div><span>${p.gender==='f'?'👧':'👦'}</span></div>`;
+let staffQ='',staffRole='';
+function vStaff(){
+  $('main').innerHTML=`<div class="row"><button class="btn o grow" onclick="form('servant')">➕ إضافة خادم / مشرف / أب كاهن</button><button class="btn g" onclick="printCards('staff')">🖨️ كروت QR</button></div><br>
+  <input placeholder="🔍 بحث بالاسم" value="${esc(staffQ)}" oninput="staffQ=this.value;staffList()">
+  <select onchange="staffRole=this.value;staffList()"><option value="">الكل (خدام ومشرفين وآباء)</option><option value="servant" ${staffRole=='servant'?'selected':''}>الخدام</option><option value="supervisor" ${staffRole=='supervisor'?'selected':''}>المشرفين</option><option value="priest" ${staffRole=='priest'?'selected':''}>الآباء الكهنة</option></select>
+  <div id="sl"></div>`;staffList()}
+function staffList(){const l=db.people.filter(p=>p.role!=='kid'&&(!staffRole||p.role===staffRole)&&p.name.includes(staffQ));
+  $('sl').innerHTML=l.map(listRow).join('')||'<div class="card">لا توجد نتائج</div>'}
+
+function profile(id){const p=db.people.find(x=>x.id===id);if(!p)return;
+  const tel=(l,n)=>n?`<div>${l}: <a href="tel:${esc(n)}">${esc(n)}</a></div>`:'';
+  openModal(`<div class="row" style="align-items:flex-start">${avatar(p,'big')}<div class="grow"><h3 style="margin:0">${esc(p.name)}</h3><span class="tag">${ROLES[p.role]}</span><br><br>${p.role==='kid'?`<div>الأسرة: ${esc(famName(p.family)||'غير محدد')}</div>`:db.families.filter(f=>(f.servants||[]).includes(p.id)).length?`<div>مسؤول عن: ${db.families.filter(f=>(f.servants||[]).includes(p.id)).map(f=>esc(f.name)).join('، ')}</div>`:''}${p.grade?`<div>الفرقة: ${esc(p.grade)}</div>`:''}${p.school?`<div>المدرسة: ${esc(p.school)}</div>`:''}${p.birth?`<div>🎂 ${esc(p.birth)}</div>`:''}</div></div><hr>
+  ${tel('📞 تليفونه',p.phone)}${tel('👨 تليفون الأب',p.father)}${tel('👩 تليفون الأم',p.mother)}${p.notes?`<p>📝 ${esc(p.notes)}</p>`:''}
+  ${histHtml(p.id)}
+  <div class="row" style="margin-top:12px"><button class="btn grow" onclick="showQR('${p.id}')">QR</button>${isAdmin()?`<button class="btn g grow" onclick="form('${p.role}','${p.id}')">تعديل</button><button class="btn r grow" onclick="delP('${p.id}')">حذف</button>`:''}</div>`)}
+function histHtml(pid){const rs=db.att.filter(r=>r.pid===pid&&r.in).sort((a,b)=>b.date.localeCompare(a.date));
+  return `<hr><b>🕘 سجل الحضور والانصراف (${rs.length} يوم)</b><table style="margin-top:6px"><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th></tr>${rs.slice(0,15).map(r=>`<tr><td>${r.date}</td><td>${r.in}</td><td>${r.out||'–'}</td></tr>`).join('')||'<tr><td colspan="3">لا يوجد سجل</td></tr>'}</table>`}
+function form(role,id,fam){if(!isAdmin()&&id)return toast('التعديل للمشرف فقط');
+  if(!isAdmin()&&role!=='kid')return toast('ليس لديك صلاحية');
+  const p=db.people.find(x=>x.id===id)||{};if(fam)p.family=fam;tmpPhoto=p.photo||'';const kid=role==='kid';
+  openModal(`<h3>${id?'تعديل':'إضافة'} ${kid?'مخدوم':'خادم'}</h3>
+  <div class="row"><div id="pv">${p.photo?`<img class="av big" src="${p.photo}">`:'<div class="av big">📷</div>'}</div><div class="grow"><label>الصورة</label><input type="file" accept="image/*" onchange="readPhoto(this)"></div></div>
+  <label>الاسم بالكامل</label><input id="f_name" value="${esc(p.name)}">
+  <label>النوع</label><select id="f_gender"><option value="m">ولد / رجل</option><option value="f" ${p.gender==='f'?'selected':''}>بنت / سيدة</option></select>
+  ${kid?`<label>الفرقة</label><select id="f_grade">${GRADES.map(g=>`<option ${p.grade===g?'selected':''}>${g}</option>`).join('')}</select><label>الأسرة</label><select id="f_family"><option value="">— بدون أسرة —</option>${db.families.map(f=>`<option value="${f.id}" ${p.family===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select><label>اسم المدرسة</label><input id="f_school" value="${esc(p.school)}">`:`<label>الصلاحية</label><select id="f_role"><option value="servant" ${p.role==='servant'?'selected':''}>خادم (إضافة فقط)</option><option value="supervisor" ${p.role==='supervisor'?'selected':''}>مشرف (كل الصلاحيات)</option><option value="priest" ${p.role==='priest'?'selected':''}>أب كاهن (كل الصلاحيات)</option></select><label>الرقم السري للدخول</label><input id="f_pin" value="${esc(p.pin)}">`}
+  <label>تاريخ الميلاد</label><input id="f_birth" type="date" value="${esc(p.birth)}">
+  <label>رقم التليفون</label><input id="f_phone" type="tel" value="${esc(p.phone)}">
+  ${kid?`<label>تليفون الأب</label><input id="f_father" type="tel" value="${esc(p.father)}"><label>تليفون الأم</label><input id="f_mother" type="tel" value="${esc(p.mother)}">`:''}
+  <label>ملاحظات</label><textarea id="f_notes" rows="2">${esc(p.notes)}</textarea>
+  <button class="btn" style="width:100%" onclick="saveP('${role}','${id||''}')">حفظ</button>`)}
+function readPhoto(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');const s=300/Math.max(im.width,im.height,300);c.width=im.width*Math.min(s,1);c.height=im.height*Math.min(s,1);c.getContext('2d').drawImage(im,0,0,c.width,c.height);tmpPhoto=c.toDataURL('image/jpeg',.7);$('pv').innerHTML=`<img class="av big" src="${tmpPhoto}">`};im.src=r.result};r.readAsDataURL(f)}
+function saveP(role,id){const g=k=>($('f_'+k)?.value||'').trim();if(!g('name'))return toast('اكتب الاسم');
+  let p=db.people.find(x=>x.id===id);if(!p){p={id:uid()};db.people.push(p)}
+  const kid=role==='kid';
+  Object.assign(p,{role:kid?'kid':g('role'),name:g('name'),gender:g('gender'),birth:g('birth'),phone:g('phone'),notes:g('notes'),photo:tmpPhoto,
+    ...(kid?{grade:g('grade'),family:g('family'),school:g('school'),father:g('father'),mother:g('mother')}:{pin:g('pin')||'0000'})});
+  save();closeModal();toast('تم الحفظ ✅');render()}
+function delP(id){if(!isAdmin())return;const p=db.people.find(x=>x.id===id);if(p.role==='supervisor'&&db.people.filter(x=>x.role==='supervisor').length<2)return toast('لازم يفضل مشرف واحد على الأقل');
+  if(!confirm('حذف '+p.name+'؟'))return;db.people=db.people.filter(x=>x.id!==id);db.att=db.att.filter(r=>r.pid!==id);save();closeModal();render()}
+
+/* ---------- QR ---------- */
+function showQR(id){const p=db.people.find(x=>x.id===id);openModal(`<div style="text-align:center"><h3>${esc(p.name)}</h3><div id="qr" style="display:inline-block"></div><p><small>${ROLES[p.role]}</small></p><button class="btn g" onclick="closeModal()">إغلاق</button></div>`);new QRCode($('qr'),{text:id,width:200,height:200})}
+function printCards(kind){const list=db.people.filter(p=>kind==='kid'?p.role==='kid':p.role!=='kid');
+  const cards=list.map(p=>{const d=document.createElement('div');new QRCode(d,{text:p.id,width:130,height:130});const src=d.querySelector('canvas').toDataURL();
+    return `<div class="c"><img src="${src}"><b>${esc(p.name)}</b><small>${esc(p.grade||ROLES[p.role])}</small></div>`}).join('');
+  const w=window.open('','_blank');if(!w)return toast('اسمح بالنوافذ المنبثقة');
+  w.document.write(`<html dir="rtl"><meta charset="utf-8"><style>body{font-family:Tahoma;display:flex;flex-wrap:wrap;gap:8px}.c{width:170px;border:2px solid #5b2a86;border-bottom:6px solid #f58220;border-radius:10px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;page-break-inside:avoid}small{color:#666}</style>${cards}<script>setTimeout(()=>print(),400)<\/script></html>`);w.document.close()}
+
+/* ---------- الحضور ---------- */
+const getRec=(pid,date=attDate)=>{let r=db.att.find(x=>x.pid===pid&&x.date===date);if(!r){r={pid,date};db.att.push(r)}return r};
+const nowT=()=>new Date().toTimeString().slice(0,5);
+function vAtt(){$('main').innerHTML=`<div class="row"><input type="date" value="${attDate}" onchange="attDate=this.value;renderAtt()" style="margin:0"><button class="btn o" onclick="openScan()">📷 مسح QR</button></div><br>
+  <div class="row"><select onchange="attGroup=this.value;renderAtt()"><option value="kid">المخدومين</option><option value="staff" ${attGroup=='staff'?'selected':''}>الخدام</option></select><select onchange="attFam=this.value;renderAtt()"><option value="">كل الأسر</option>${db.families.map(f=>`<option value="${f.id}" ${attFam===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select><select onchange="attGrade=this.value;renderAtt()"><option value="">كل الفرق</option>${GRADES.map(g=>`<option ${g===attGrade?'selected':''}>${g}</option>`).join('')}</select></div>
+  <input placeholder="🔍 بحث عن اسم في الحضور والانصراف" value="${esc(attQ)}" oninput="attQ=this.value;renderAtt()" style="margin-top:8px">
+  <div id="al"></div>`;renderAtt()}
+function renderAtt(){const el=$('al');if(!el)return;
+  const list=db.people.filter(p=>p.name.includes(attQ)&&(attGroup==='kid'?p.role==='kid'&&(!attGrade||p.grade===attGrade)&&(!attFam||p.family===attFam):p.role!=='kid'&&(!attFam||((db.families.find(f=>f.id===attFam)||{}).servants||[]).includes(p.id)))).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  const sel=(pid,f,max,v)=>`<select onchange="setRec('${pid}','${f}',this.value)">${Array.from({length:max+1},(_,i)=>`<option ${v==i?'selected':''}>${i}</option>`).join('')}</select>`;
+  el.innerHTML=list.map(p=>{const r=db.att.find(x=>x.pid===p.id&&x.date===attDate)||{};
+    return `<div class="card att"><div class="row">${avatar(p)}<b class="grow">${esc(p.name)}</b><button class="btn sm ${r.in?(r.out?'g':'o'):''}" onclick="tapIO('${p.id}')">${r.in?(r.out?'✔ '+r.in+'–'+r.out:'انصراف ('+r.in+')'):'حضور'}</button></div>
+    ${attGroup==='kid'?`<div class="row" style="margin-top:8px;flex-wrap:wrap;font-size:12px"><label><input type="checkbox" style="width:auto;margin:0" ${r.mass?'checked':''} onchange="setRec('${p.id}','mass',this.checked)"> قداس</label><label><input type="checkbox" style="width:auto;margin:0" ${r.svc?'checked':''} onchange="setRec('${p.id}','svc',this.checked)"> خدمة</label><label>نشاط ${sel(p.id,'act',5,r.act||0)}</label><label>سلوك ${sel(p.id,'beh',5,r.beh||0)}</label><label>مسابقة ${sel(p.id,'quiz',10,r.quiz||0)}</label></div>`:''}</div>`}).join('')||'<div class="card">لا يوجد أحد</div>'}
+function setRec(pid,f,v){getRec(pid)[f]=v==='true'||v===true?true:v==='false'||v===false?false:+v;save()}
+function tapIO(pid){const r=getRec(pid);if(!r.in)r.in=nowT();else if(!r.out)r.out=nowT();else{if(!isAdmin())return toast('التعديل للمشرف فقط');delete r.in;delete r.out}save();renderAtt()}
+function openScan(){openModal(`<h3>وجّه الكاميرا على كود QR</h3><div id="reader"></div><br><button class="btn g" onclick="closeModal()">إغلاق</button>`);
+  scanner=new Html5Qrcode('reader');scanner.start({facingMode:'environment'},{fps:10,qrbox:220},onScan).catch(()=>toast('تعذر فتح الكاميرا — تأكد من الإذن ومن أن الرابط https'))}
+function stopScan(){if(scanner){scanner.stop().catch(()=>{});scanner=null}}
+function onScan(txt){const p=db.people.find(x=>x.id===txt);if(!p)return;if(lastScan[txt]&&Date.now()-lastScan[txt]<5000)return;lastScan[txt]=Date.now();
+  const r=getRec(p.id,today());if(!r.in){r.in=nowT();toast('✅ حضور: '+p.name)}else if(!r.out){r.out=nowT();toast('👋 انصراف: '+p.name)}else toast('سُجّل بالفعل: '+p.name);
+  save();if(navigator.vibrate)navigator.vibrate(100);if(tab==='att'&&attDate===today())renderAtt()}
+
+/* ---------- التقارير ---------- */
+const pts=r=>(r.mass?2:0)+(r.svc?1:0)+(+r.act||0)+(+r.beh||0)+(+r.quiz||0);
+let repPid='',repMonth=today().slice(0,7),repFam='';
+function vRep(){const kids=db.people.filter(p=>p.role==='kid'&&(!repFam||p.family===repFam)).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  const inM=db.att.filter(r=>r.date.startsWith(repMonth));
+  const board=kids.map(k=>{const rs=inM.filter(r=>r.pid===k.id);return{k,pts:rs.reduce((s,r)=>s+pts(r),0),days:rs.filter(r=>r.in).length}}).sort((a,b)=>b.pts-a.pts);
+  let det='';if(repPid){const k=db.people.find(x=>x.id===repPid);const rs=inM.filter(r=>r.pid===repPid).sort((a,b)=>a.date.localeCompare(b.date));
+    det=`<div class="card"><h3>${esc(k.name)}</h3><table><tr><th>التاريخ</th><th>حضور</th><th>قداس</th><th>خدمة</th><th>نشاط</th><th>سلوك</th><th>مسابقة</th><th>النقاط</th></tr>${rs.map(r=>`<tr><td>${r.date.slice(5)}</td><td>${r.in?'✔':'–'}</td><td>${r.mass?'✔':'–'}</td><td>${r.svc?'✔':'–'}</td><td>${r.act||0}</td><td>${r.beh||0}</td><td>${r.quiz||0}</td><td><b>${pts(r)}</b></td></tr>`).join('')}<tr><th colspan="7">المجموع</th><th>${rs.reduce((s,r)=>s+pts(r),0)}</th></tr></table></div>`}
+  $('main').innerHTML=`<div class="row noprint"><input type="month" value="${repMonth}" onchange="repMonth=this.value;vRep()"><select onchange="repFam=this.value;repPid='';vRep()"><option value="">كل الأسر</option>${db.families.map(f=>`<option value="${f.id}" ${repFam===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select><select onchange="repPid=this.value;vRep()"><option value="">— تقرير مخدوم —</option>${kids.map(k=>`<option value="${k.id}" ${k.id===repPid?'selected':''}>${esc(k.name)}</option>`).join('')}</select></div>${det}
+  <h3 style="color:var(--p)">🏆 ترتيب النقاط</h3><small>القداس ٢ نقطة، الخدمة ١، والنشاط والسلوك (حتى ٥)، والمسابقة (حتى ١٠)</small>
+  <div class="card"><table><tr><th>#</th><th>الاسم</th><th>أيام الحضور</th><th>النقاط</th></tr>${board.map((b,i)=>`<tr><td>${i+1}</td><td style="text-align:right">${esc(b.k.name)}</td><td>${b.days}</td><td><b>${b.pts}</b></td></tr>`).join('')}</table></div>
+  <button class="btn g noprint" onclick="print()">🖨️ طباعة / حفظ PDF</button>`}
+
+/* ---------- الإعدادات ---------- */
+function vSet(){$('main').innerHTML=`<div class="card"><b>🔔 تنبيهات أعياد الميلاد</b><p><small>تظهر عند فتح التطبيق.</small></p><button class="btn" onclick="Notification.requestPermission().then(()=>toast('تم'))">تفعيل التنبيهات</button></div>
+  ${isAdmin()?`<div class="card"><b>🖼️ لوجو التطبيق</b><div class="row" style="margin:8px 0"><img src="${logoSrc()}" style="height:60px;background:var(--pl);border-radius:10px;padding:4px" onerror="this.style.display='none'"><div class="grow"><input type="file" accept="image/*" onchange="saveLogo(this)" style="margin:0"></div></div><button class="btn g sm" onclick="delete db.settings.logo;save();render();toast('رجع اللوجو الافتراضي')">إرجاع اللوجو الافتراضي</button></div>`:''}
+  ${isAdmin()?`<div class="card"><b>💾 نسخة احتياطية (مهم جداً)</b><p><small>حمّل نسخة كل أسبوع واحفظها على جوجل درايف.</small></p><button class="btn" onclick="backup()">تحميل نسخة</button> <button class="btn o" onclick="shareBackup()">📤 إرسال النسخة (جيميل / درايف / واتساب)</button><br><br><label>استرجاع نسخة</label><input type="file" accept=".json" onchange="restore(this)"></div>
+  <div class="card"><button class="btn r" onclick="if(confirm('مسح كل البيانات نهائياً؟')){localStorage.removeItem(K);sessionStorage.clear();location.reload()}">مسح كل البيانات</button></div>`:'<div class="card">إعدادات البيانات للمشرف فقط.</div>'}`}
+function saveLogo(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');const s=Math.min(1,400/Math.max(im.width,im.height));c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);db.settings.logo=c.toDataURL('image/png');save();render();toast('تم تغيير اللوجو ✅')};im.src=r.result};r.readAsDataURL(f)}
+function backup(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'}));a.download='kontarion-backup-'+today()+'.json';a.click()}
+async function shareBackup(){const f=new File([JSON.stringify(db)],'kontarion-backup-'+today()+'.json',{type:'application/json'});
+  if(navigator.canShare&&navigator.canShare({files:[f]}))try{await navigator.share({files:[f],title:'نسخة كونتاريون'})}catch{}else{backup();toast('تم تحميل الملف — ابعته على جيميلك')}}
+function restore(i){const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.people)throw 0;db=d;save();toast('تم الاسترجاع');logout()}catch{toast('ملف غير صالح')}};r.readAsText(f)}
+
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();notifyBdays();
+</script>
+</body>
+</html>
